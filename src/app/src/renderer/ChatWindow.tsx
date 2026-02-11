@@ -14,6 +14,7 @@ import { useModels, DEFAULT_MODEL_ID } from './hooks/useModels';
 import { useAudioCapture } from './hooks/useAudioCapture';
 import { TranscriptionWebSocket } from './utils/websocketClient';
 import { voiceOptions } from './tabs/TTSSettings';
+import { useSystem } from './hooks/useSystem';
 
 interface ImageContent {
   type: 'image_url';
@@ -52,6 +53,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isVisible, width }) => {
     userHasSelectedModel,
     setUserHasSelectedModel,
   } = useModels();
+
+  // Get system context for lazy loading system info
+  const { ensureSystemInfoLoaded } = useSystem();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -681,6 +685,9 @@ const downloadModelForChat = async (modelName: string): Promise<boolean> => {
 
 const sendMessage = async () => {
     if ((!inputValue.trim() && uploadedImages.length === 0) || isLoading || isDownloadingForChat) return;
+
+    // Trigger system info load on first model use (lazy loading)
+    await ensureSystemInfoLoaded();
 
     // Cancel any existing request
     if (abortControllerRef.current) {
