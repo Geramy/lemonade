@@ -9,11 +9,7 @@ using json = nlohmann::json;
 
 static const json DEFAULTS = {
     {"ctx_size", 4096},
-#ifdef __APPLE__
-    {"llamacpp_backend", "metal"},  // Will be overridden dynamically
-#else
-    {"llamacpp_backend", "vulkan"},  // Will be overridden dynamically
-#endif
+    {"llamacpp_backend", ""},  // Will be overridden dynamically based on system detection
     {"llamacpp_args", ""},
     {"sd-cpp_backend", "cpu"},  // sd.cpp backend selection (cpu or rocm)
     {"whispercpp_backend", "npu"},
@@ -130,7 +126,26 @@ void RecipeOptions::add_cli_options(CLI::App& app, json& storage) {
             if (backend_cache.find(recipe) == backend_cache.end()) {
                 backend_cache[recipe] = SystemInfo::get_supported_backends(recipe);
             }
-            const auto& result = backend_cache[recipe];
+            auto result = backend_cache[recipe];
+
+            // Prefer system llamacpp if available (unless LEMONADE_LLAMACPP_PREFER_SYSTEM=false)
+            if (opt_name == "llamacpp_backend") {
+                const char* prefer_system_env = std::getenv("LEMONADE_LLAMACPP_PREFER_SYSTEM");
+                bool prefer_system = true;
+
+                if (prefer_system_env && std::string(prefer_system_env) == "false") {
+                    prefer_system = false;
+                }
+
+                if (prefer_system) {
+                    auto it = std::find(result.backends.begin(), result.backends.end(), "system");
+                    if (it != result.backends.end()) {
+                        result.backends.erase(it);
+                        result.backends.insert(result.backends.begin(), "system");
+                    }
+                }
+            }
+
             std::string default_backend = result.backends.empty() ? "" : result.backends[0];
 
             // Pre-populate storage with the dynamically detected default so it's

@@ -100,6 +100,10 @@ static const std::vector<RecipeBackendDef> RECIPE_DEFS = {
     {"llamacpp", "cpu", {"windows", "linux"}, {
         {"cpu", {"x86_64"}},
     }},
+    // llamacpp system (uses system-installed llama-server from PATH)
+    {"llamacpp", "system", {"linux"}, {
+        {"cpu", {"x86_64"}}, // Placeholder, actual check is PATH-based
+    }},
 
     // whisper.cpp - Windows x86_64 only
     {"whispercpp", "npu", {"windows"}, {
@@ -763,8 +767,13 @@ json SystemInfo::build_recipes_info(const json& devices) {
             }
 
             backend["error"] = error;
-        } else if (available) {
-            // Add version if installed
+        } else if (!available) {
+            // Supported but not available (e.g., system backend but llama-server not in PATH)
+            if (def.backend == "system") {
+                backend["error"] = "llama-server not found in PATH";
+            }
+        } else {
+            // Supported and available - add version if installed
             std::string version = get_recipe_version(def.recipe, def.backend);
             if (!version.empty() && version != "unknown") {
                 backend["version"] = version;
@@ -802,10 +811,22 @@ SystemInfo::SupportedBackendsResult SystemInfo::get_supported_backends(const std
         if (def.recipe == recipe) {
             if (recipe_info["backends"].contains(def.backend)) {
                 const auto& backend = recipe_info["backends"][def.backend];
-                if (backend.value("supported", false)) {
+                bool supported = backend.value("supported", false);
+
+                // For "system" backend, also require it to be available (i.e., binary in PATH)
+                if (def.backend == "system" && supported) {
+                    bool available = backend.value("available", false);
+                    if (!available) {
+                        supported = false;
+                        if (result.not_supported_error.empty()) {
+                            result.not_supported_error = backend.value("error", "llama-server not found in PATH");
+                        }
+                    }
+                }
+
+                if (supported) {
                     result.backends.push_back(def.backend);
                 } else if (result.not_supported_error.empty() && backend.contains("error")) {
-                    // Capture first error encountered (in preference order)
                     result.not_supported_error = backend["error"].get<std::string>();
                 }
             }
@@ -911,11 +932,18 @@ std::string SystemInfo::get_oga_version() {
 }
 
 bool SystemInfo::is_llamacpp_installed(const std::string& backend) {
-    try {
-        BackendUtils::get_backend_binary_path(LlamaCppServer::SPEC, backend);
-        return true;
-    } catch (const std::exception& e) {
-        return false;
+    if (backend == "system") {
+        // For "system" backend, check if "llama-server" exists in PATH
+        std::string llama_server_path = utils::find_executable_in_path("llama-server");
+        return !llama_server_path.empty();
+    } else {
+        // For other backends, use the existing logic
+        try {
+            BackendUtils::get_backend_binary_path(LlamaCppServer::SPEC, backend);
+            return true;
+        } catch (const std::exception& e) {
+            return false;
+        }
     }
 }
 
@@ -2621,6 +2649,53 @@ json SystemInfoCache::get_system_info_with_cache() {
 
         // Add recipes section (always fresh, never cached)
         system_info["recipes"] = sys_info->build_recipes_info(system_info["devices"]);
+
+        // Add supported_recipes section with preferred backends
+        json supported_recipes = json::object();
+        for (const auto& [recipe_name, recipe_info] : system_info["recipes"].items()) {
+            if (!recipe_info.contains("backends")) continue;
+
+            // Find first supported backend in preference order
+            std::string preferred_backend;
+            for (const auto& def : RECIPE_DEFS) {
+                if (def.recipe != recipe_name) continue;
+
+                if (recipe_info["backends"].contains(def.backend)) {
+                    const auto& backend = recipe_info["backends"][def.backend];
+                    if (backend.value("supported", false)) {
+                        // Prefer system llamacpp if available (unless LEMONADE_LLAMACPP_PREFER_SYSTEM=false)
+                        if (recipe_name == "llamacpp") {
+                            const char* prefer_system_env = std::getenv("LEMONADE_LLAMACPP_PREFER_SYSTEM");
+                            bool prefer_system = true;
+
+                            if (prefer_system_env && std::string(prefer_system_env) == "false") {
+                                prefer_system = false;
+                            }
+
+                            if (prefer_system) {
+                                if (recipe_info["backends"].contains("system") &&
+                                    recipe_info["backends"]["system"].value("supported", false)) {
+                                    preferred_backend = "system";
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (preferred_backend.empty()) {
+                            preferred_backend = def.backend;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!preferred_backend.empty()) {
+                supported_recipes[recipe_name] = {
+                    {"preferred_backend", preferred_backend}
+                };
+            }
+        }
+        system_info["supported_recipes"] = supported_recipes;
 
     } catch (const std::exception& e) {
         // Catastrophic failure - return minimal info but don't crash
