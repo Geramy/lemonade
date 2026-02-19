@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
-import {fetchSystemInfoData, SystemInfo, Recipes, fetchSystemChecks, SystemCheck} from "../utils/systemData";
+import {fetchSystemInfoData, SystemInfo, fetchSystemChecks, SystemCheck} from "../utils/systemData";
 
 interface SystemContextValue {
   systemInfo?: SystemInfo;
@@ -94,52 +94,68 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({childre
     }
   }, []);
 
-  // Check if any loaded models are using ROCm
   const checkForRocmUsage = useCallback(async () => {
-    // Don't show if user has permanently dismissed
+    // Fetch fresh system checks to avoid stale state from closures
+    let checks: SystemCheck[] = [];
+    try {
+      checks = await fetchSystemChecks();
+      setSystemChecks(checks);
+    } catch (error) {
+      console.error('Failed to fetch system checks:', error);
+      return;
+    }
+
     if (isSystemChecksDismissed()) {
       return;
     }
 
-    // Don't show if there are no system checks
-    if (systemChecks.length === 0) {
+    if (checks.length === 0) {
       setShouldShowSystemChecks(false);
       return;
     }
 
-    try {
-      const { serverFetch } = await import('../utils/serverConfig');
-      const response = await serverFetch('/health');
-      if (!response.ok) {
-        return;
-      }
-
-      const data = await response.json();
-      const allModelsLoaded = data.all_models_loaded || [];
-
-      // Check if any loaded model is using ROCm backend
-      const hasRocmModel = allModelsLoaded.some((model: any) => {
-        const recipeOptions = model.recipe_options || {};
-        const recipe = model.recipe || '';
-
-        // Check for ROCm in llamacpp backend
-        if (recipe === 'llamacpp' && recipeOptions.llamacpp_backend === 'rocm') {
-          return true;
+    const checkHealth = async (retryCount = 0): Promise<boolean> => {
+      try {
+        const { serverFetch } = await import('../utils/serverConfig');
+        const response = await serverFetch('/health');
+        if (!response.ok) {
+          return false;
         }
 
-        // Check for ROCm in sd-cpp backend
-        if (recipe === 'sd-cpp' && recipeOptions['sd-cpp_backend'] === 'rocm') {
-          return true;
+        const data = await response.json();
+        const allModelsLoaded = data.all_models_loaded || [];
+
+        const hasRocmModel = allModelsLoaded.some((model: any) => {
+          const recipeOptions = model.recipe_options || {};
+          const recipe = model.recipe || '';
+
+          if (recipe === 'llamacpp' && recipeOptions.llamacpp_backend === 'rocm') {
+            return true;
+          }
+
+          if (recipe === 'sd-cpp' && recipeOptions['sd-cpp_backend'] === 'rocm') {
+            return true;
+          }
+
+          return false;
+        });
+
+        // Retry once after a delay if model hasn't loaded yet
+        if (!hasRocmModel && retryCount === 0 && allModelsLoaded.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return checkHealth(1);
         }
 
+        return hasRocmModel;
+      } catch (error) {
+        console.error('Failed to check for ROCm usage:', error);
         return false;
-      });
+      }
+    };
 
-      setShouldShowSystemChecks(hasRocmModel);
-    } catch (error) {
-      console.error('Failed to check for ROCm usage:', error);
-    }
-  }, [systemChecks, isSystemChecksDismissed]);
+    const hasRocmModel = await checkHealth();
+    setShouldShowSystemChecks(hasRocmModel);
+  }, [isSystemChecksDismissed]);
 
   // Dismiss system checks modal
   const dismissSystemChecks = useCallback((permanent: boolean) => {
