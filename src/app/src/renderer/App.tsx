@@ -23,7 +23,7 @@ const LAYOUT_CONSTANTS = {
 
 // Inner component that can use SystemProvider context
 const AppContent: React.FC = () => {
-  const { systemChecks } = useSystem();
+  const { systemChecks, shouldShowSystemChecks, dismissSystemChecks } = useSystem();
   const [isChatVisible, setIsChatVisible] = useState(DEFAULT_LAYOUT_SETTINGS.isChatVisible);
   const [isModelManagerVisible, setIsModelManagerVisible] = useState(DEFAULT_LAYOUT_SETTINGS.isModelManagerVisible);
   const [isCenterPanelVisible, setIsCenterPanelVisible] = useState(DEFAULT_LAYOUT_SETTINGS.isCenterPanelVisible_v2);
@@ -120,16 +120,16 @@ const AppContent: React.FC = () => {
     };
   }, []);
 
-  // Show system checks modal when issues are detected
+  // Show system checks modal when ROCm usage is detected
   useEffect(() => {
-    if (systemChecks.length > 0) {
+    if (shouldShowSystemChecks) {
       setIsSystemChecksModalOpen(true);
       // Log issues to console for debugging
       systemChecks.forEach(check => {
         console.warn(`System check [${check.id}]:`, check.message);
       });
     }
-  }, [systemChecks]);
+  }, [shouldShowSystemChecks, systemChecks]);
 
   useEffect(() => {
     const hasMainColumn = isCenterPanelVisible || isLogsVisible;
@@ -352,7 +352,10 @@ const AppContent: React.FC = () => {
       <StatusBar />
       <SystemChecksModal
         isOpen={isSystemChecksModalOpen}
-        onClose={() => setIsSystemChecksModalOpen(false)}
+        onClose={(permanent) => {
+          setIsSystemChecksModalOpen(false);
+          dismissSystemChecks(permanent);
+        }}
         checks={systemChecks}
       />
     </ModelsProvider>

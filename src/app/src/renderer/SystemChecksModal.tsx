@@ -1,27 +1,28 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SystemCheck } from './utils/systemData';
 
 interface SystemChecksModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (permanent: boolean) => void;
   checks: SystemCheck[];
 }
 
 const SystemChecksModal: React.FC<SystemChecksModalProps> = ({ isOpen, onClose, checks }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
-        onClose();
+        onClose(dontShowAgain);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        onClose(dontShowAgain);
       }
     };
 
@@ -32,7 +33,7 @@ const SystemChecksModal: React.FC<SystemChecksModalProps> = ({ isOpen, onClose, 
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, dontShowAgain]);
 
   if (!isOpen) return null;
 
@@ -78,7 +79,7 @@ const SystemChecksModal: React.FC<SystemChecksModalProps> = ({ isOpen, onClose, 
       <div ref={cardRef} className="modal-card system-checks-modal">
         <div className="modal-header">
           <h2>System Checks</h2>
-          <button className="modal-close-btn" onClick={onClose}>
+          <button className="modal-close-btn" onClick={() => onClose(dontShowAgain)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -125,7 +126,15 @@ const SystemChecksModal: React.FC<SystemChecksModalProps> = ({ isOpen, onClose, 
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>
+          <label className="dont-show-again-label">
+            <input
+              type="checkbox"
+              checked={dontShowAgain}
+              onChange={(e) => setDontShowAgain(e.target.checked)}
+            />
+            <span>Don't show this again</span>
+          </label>
+          <button className="btn-secondary" onClick={() => onClose(dontShowAgain)}>
             Close
           </button>
         </div>

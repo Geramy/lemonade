@@ -5213,8 +5213,29 @@ footer {
     padding: 16px 24px;
     border-top: 1px solid #272727;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 12px;
+}
+
+.dont-show-again-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #ccc;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dont-show-again-label input[type="checkbox"] {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.dont-show-again-label:hover {
+    color: #fff;
 }
 
 .system-checks-modal .modal-content {

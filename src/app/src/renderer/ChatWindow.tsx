@@ -54,8 +54,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isVisible, width }) => {
     setUserHasSelectedModel,
   } = useModels();
 
-  // Get system context for lazy loading system info
-  const { ensureSystemInfoLoaded } = useSystem();
+  // Get system context for lazy loading system info and checking ROCm usage
+  const { ensureSystemInfoLoaded, checkForRocmUsage } = useSystem();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -854,6 +854,8 @@ const sendMessage = async () => {
       userScrolledAwayRef.current = false;
       // Notify StatusBar to refresh server stats
       window.dispatchEvent(new CustomEvent('inference-complete'));
+      // Check if ROCm is being used to show system checks if needed
+      checkForRocmUsage();
     }
   };
 
@@ -1290,6 +1292,8 @@ const handleMessageToSpeech = async () => {
       userScrolledAwayRef.current = false;
       // Notify StatusBar to refresh server stats
       window.dispatchEvent(new CustomEvent('inference-complete'));
+      // Check if ROCm is being used to show system checks if needed
+      checkForRocmUsage();
     }
   };
 
