@@ -96,7 +96,6 @@ To see the backends available on your PC:
 lemonade-server recipes
 ```
 
-
 ## Model Library
 
 <img align="right" src="https://github.com/lemonade-sdk/assets/blob/main/docs/model_manager_02.png?raw=true" alt="Model Manager" width="280" />
