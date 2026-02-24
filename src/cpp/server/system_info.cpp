@@ -939,7 +939,8 @@ bool SystemInfo::is_sdcpp_installed(const std::string& backend) {
 
 bool SystemInfo::is_flm_installed(const std::string& backend, std::string& error_message) {
 #ifdef _WIN32
-    FILE* pipe = _popen("flm validate 2>&1", "r");
+    //TODO: Update to 0.9.35 command if 0.9.35+ present
+    FILE* pipe = _popen("flm version 2>&1", "r");
 #else
     FILE* pipe = popen("flm validate 2>&1 1>/dev/null ", "r");
 #endif

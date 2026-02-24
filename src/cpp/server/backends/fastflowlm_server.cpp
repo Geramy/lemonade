@@ -424,7 +424,9 @@ bool FastFlowLMServer::validate() {
         return false;
     }
 #ifdef _WIN32
-    FILE* pipe = _popen(("\"" + flm_path + "\" validate 2>&1").c_str(), "r");
+    //TODO: Update to 0.9.35 command if 0.9.35+ present
+    //FILE* pipe = _popen(("\"" + flm_path + "\" validate 2>&1").c_str(), "r");
+    FILE* pipe = _popen(("\"" + flm_path + "\" version 2>&1").c_str(), "r");
 #else
     FILE* pipe = popen(("\"" + flm_path + "\" validate 2>&1 1>/dev/null ").c_str(), "r");
 #endif
