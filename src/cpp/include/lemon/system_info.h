@@ -105,6 +105,7 @@ public:
     static std::string get_oga_version();
     static std::string get_flm_version();
     static bool is_llamacpp_installed(const std::string& backend);
+    static bool is_flm_installed(const std::string& backend, std::string& error_message);
     static bool is_whispercpp_installed(const std::string& backend);
     static bool is_kokoro_installed(const std::string& backend);
     static bool is_sdcpp_installed(const std::string& backend);

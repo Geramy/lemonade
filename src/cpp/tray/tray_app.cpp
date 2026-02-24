@@ -1640,7 +1640,7 @@ int TrayApp::execute_recipes_command() {
                 std::string info_col;
                 if (!backend.version.empty() && backend.version != "unknown") {
                     info_col = backend.version;
-                } else if (!backend.supported && !backend.error.empty()) {
+                } else if (!backend.error.empty()) {
                     info_col = backend.error;
                 } else {
                     info_col = "-";

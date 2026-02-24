@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../wrapped_server.h"
+#include "backend_utils.h"
 #include <string>
 
 namespace lemon {
@@ -8,11 +9,23 @@ namespace backends {
 
 class FastFlowLMServer : public WrappedServer, public IEmbeddingsServer, public IRerankingServer {
 public:
+    inline static const BackendSpec SPEC = BackendSpec(
+        // recipe
+            "flm",
+        // executable
+    #ifdef _WIN32
+            "flm.exe"
+    #else
+            "flm"
+    #endif
+    );
+
     FastFlowLMServer(const std::string& log_level = "info", ModelManager* model_manager = nullptr);
 
     ~FastFlowLMServer() override;
 
     void install(const std::string& backend = "") override;
+    bool check();
 
     std::string download_model(const std::string& checkpoint,
                               bool do_not_upgrade = false);
@@ -58,6 +71,7 @@ private:
     std::string get_min_npu_driver_version();  // Get minimum driver version from backend_versions.json
     std::string get_npu_driver_version();      // Get current NPU driver version via WMI
     bool check_npu_driver_version();           // Check if NPU driver meets minimum requirements
+    bool validate();                           // Validate FLM installation by calling 'flm validate' and checking output
 
     // Installation - returns true if FLM was upgraded (may invalidate existing models)
     bool install_flm_if_needed();

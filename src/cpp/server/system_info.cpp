@@ -30,6 +30,10 @@
 #include <sys/sysctl.h>
 #endif
 
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
+
 namespace lemon {
 
 namespace fs = std::filesystem;
@@ -257,7 +261,7 @@ static bool device_matches_constraint(const std::string& device_family,
 }
 
 // Generic installation check
-static bool is_recipe_installed(const std::string& recipe, const std::string& backend) {
+static bool is_recipe_installed(const std::string& recipe, const std::string& backend, std::string& error_message) {
     if (recipe == "llamacpp") {
         return SystemInfo::is_llamacpp_installed(backend);
     }
@@ -271,24 +275,7 @@ static bool is_recipe_installed(const std::string& recipe, const std::string& ba
         return SystemInfo::is_sdcpp_installed(backend);
     }
     if (recipe == "flm") {
-        // Check if FLM is installed
-        #ifdef _WIN32
-        for (const auto& path : {"C:\\Program Files\\AMD\\FLM\\flm.exe",
-                                  "C:\\Program Files (x86)\\AMD\\FLM\\flm.exe"}) {
-            if (fs::exists(path)) {
-                return true;
-            }
-        }
-        // Check PATH for non-standard installations
-        FILE* pipe = _popen("where flm 2>NUL", "r");
-        if (pipe) {
-            char buffer[256];
-            bool found = (fgets(buffer, sizeof(buffer), pipe) != nullptr);
-            _pclose(pipe);
-            return found;
-        }
-        #endif
-        return false;
+        return SystemInfo::is_flm_installed(backend, error_message);
     }
     if (recipe == "ryzenai-llm") {
         return SystemInfo::is_ryzenai_serve_available();
@@ -727,7 +714,8 @@ json SystemInfo::build_recipes_info(const json& devices) {
         }
 
         bool supported = !unique_matching.empty();
-        bool available = is_recipe_installed(def.recipe, def.backend);
+        std::string install_error;
+        bool available = is_recipe_installed(def.recipe, def.backend, install_error);
 
         json backend = {
             {"devices", unique_matching},
@@ -769,6 +757,9 @@ json SystemInfo::build_recipes_info(const json& devices) {
             if (!version.empty() && version != "unknown") {
                 backend["version"] = version;
             }
+        } else if (!install_error.empty()) {
+            // Supported but not available - capture installation error
+            backend["error"] = install_error;
         }
 
         // Add to the appropriate recipe/backend structure
@@ -944,6 +935,45 @@ bool SystemInfo::is_sdcpp_installed(const std::string& backend) {
     } catch (const std::exception& e) {
         return false;
     }
+}
+
+bool SystemInfo::is_flm_installed(const std::string& backend, std::string& error_message) {
+#ifdef _WIN32
+    FILE* pipe = _popen("flm validate 2>&1", "r");
+#else
+    FILE* pipe = popen("flm validate 2>&1 1>/dev/null ", "r");
+#endif
+    if (!pipe) {
+        return false;
+    }
+    char buffer[256];
+    std::string output;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+#ifdef _WIN32
+    int exit_code = _pclose(pipe);
+#else
+    int exit_code = pclose(pipe);
+    if (exit_code != -1) {
+        exit_code = WEXITSTATUS(exit_code);
+    }
+#endif
+
+    // Use output as error message, trim it to first line
+    if (exit_code != 0) {
+        size_t first_newline = output.find_first_of("\r\n");
+        if (first_newline != std::string::npos) {
+            error_message = output.substr(0, first_newline);
+        } else if (!output.empty()) {
+            error_message = output;
+        } else {
+            error_message = "flm validate failed with exit code " + std::to_string(exit_code);
+        }
+        return false;
+    }
+
+    return true;
 }
 
 // Helper to identify ROCm architecture from GPU name
@@ -1136,6 +1166,10 @@ std::string SystemInfo::get_rocm_arch() {
 std::string SystemInfo::get_flm_version() {
     #ifdef _WIN32
     FILE* pipe = _popen("flm version 2>NUL", "r");
+    #else
+    FILE* pipe = popen("flm version 2>/dev/null", "r");
+    #endif
+
     if (!pipe) {
         return "unknown";
     }
@@ -1145,7 +1179,12 @@ std::string SystemInfo::get_flm_version() {
     if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
         output = buffer;
     }
+
+    #ifdef _WIN32
     _pclose(pipe);
+    #else
+    pclose(pipe);
+    #endif
 
     // Parse version from output like "FLM v0.9.4"
     if (output.find("FLM v") != std::string::npos) {
@@ -1158,7 +1197,6 @@ std::string SystemInfo::get_flm_version() {
         }
         return version;
     }
-    #endif
 
     return "unknown";
 }
