@@ -561,8 +561,7 @@ bool ServerManager::spawn_process() {
     }
 
     if (pid == 0) {
-        // Child process - redirect stdout/stderr to log file if specified, or /dev/null if not
-        if (!log_file_.empty()) {
+        if (!log_file_.empty() && log_file_ != "-") {
             int log_fd = open(log_file_.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (log_fd >= 0) {
                 dup2(log_fd, STDOUT_FILENO);
@@ -571,8 +570,7 @@ bool ServerManager::spawn_process() {
             } else {
                 std::cerr << "Failed to open log file: " << log_file_ << std::endl;
             }
-        } else {
-            // Redirect to /dev/null to suppress output (for ephemeral servers)
+        } else if (log_file_.empty()) {
             int null_fd = open("/dev/null", O_WRONLY);
             if (null_fd >= 0) {
                 dup2(null_fd, STDOUT_FILENO);
@@ -580,6 +578,7 @@ bool ServerManager::spawn_process() {
                 close(null_fd);
             }
         }
+        // log_file_ == "-": keep stdout/stderr connected for systemd
 
         std::vector<const char*> args;
         args.push_back(server_binary_path_.c_str());
@@ -778,6 +777,13 @@ bool ServerManager::terminate_router_tree() {
 }
 
 void ServerManager::write_pid_file() {
+    // Only skip PID file when running as a systemd service (not just having JOURNAL_STREAM set)
+    const char* journal_stream = std::getenv("JOURNAL_STREAM");
+    const char* invocation_id = std::getenv("INVOCATION_ID");
+    if (journal_stream && invocation_id) {
+        return;  // Systemd tracks PID itself
+    }
+
     std::string pid_file_path = "/tmp/lemonade-router.pid";
     DEBUG_LOG(this, "write_pid_file() called - PID: " << server_pid_ << ", Port: " << port_);
 
@@ -794,11 +800,17 @@ void ServerManager::write_pid_file() {
 }
 
 void ServerManager::remove_pid_file() {
+    // Only skip PID file when running as a systemd service (not just having JOURNAL_STREAM set)
+    const char* journal_stream = std::getenv("JOURNAL_STREAM");
+    const char* invocation_id = std::getenv("INVOCATION_ID");
+    if (journal_stream && invocation_id) {
+        return;
+    }
+
     std::string pid_file_path = "/tmp/lemonade-router.pid";
     if (remove(pid_file_path.c_str()) == 0) {
         DEBUG_LOG(this, "Removed PID file: " << pid_file_path);
     }
-    // Silently ignore if file doesn't exist
 }
 
 #endif

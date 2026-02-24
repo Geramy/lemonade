@@ -2063,10 +2063,18 @@ bool TrayApp::start_server() {
             log_file_ = "lemonade-server.log";
         }
         #else
-        // Unix: /tmp/lemonade-server.log or ~/.lemonade/server.log
-        log_file_ = "/tmp/lemonade-server.log";
+        // Only use systemd journal if running as a systemd service (not just having JOURNAL_STREAM set)
+        // Check for INVOCATION_ID which is only set when running as a systemd service
+        const char* journal_stream = std::getenv("JOURNAL_STREAM");
+        const char* invocation_id = std::getenv("INVOCATION_ID");
+        if (journal_stream && invocation_id) {
+            log_file_ = "-";  // Special value: don't redirect stdout/stderr
+            DEBUG_LOG(this, "Detected systemd service - logging will go to journal");
+        } else {
+            log_file_ = "/tmp/lemonade-server.log";
+            DEBUG_LOG(this, "Using default log file: " << log_file_);
+        }
         #endif
-        DEBUG_LOG(this, "Using default log file: " << log_file_);
     }
 
     bool success = server_manager_->start_server(

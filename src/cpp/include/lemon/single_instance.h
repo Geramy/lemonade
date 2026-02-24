@@ -39,7 +39,13 @@ public:
 
         return false;
 #else
-        // Unix/Linux: Use file locking
+        // Only skip lock file when running as a systemd service (not just having JOURNAL_STREAM set)
+        const char* journal_stream = std::getenv("JOURNAL_STREAM");
+        const char* invocation_id = std::getenv("INVOCATION_ID");
+        if (journal_stream && invocation_id) {
+            return false;  // Systemd ensures single instance
+        }
+
         std::string lock_file = "/tmp/lemonade_" + app_name + ".lock";
         int fd = open(lock_file.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
 
